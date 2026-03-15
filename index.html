@@ -15,6 +15,7 @@
     <div id="loading-text" style="color: white; font-family: cursive; font-size: 48px; text-align: center; margin-top: 20px;">LOADING...</div>
     <canvas id="canvas"> Your browser does not support the canvas tag. </canvas>
     <noscript> Your browser does not support JavaScript. </noscript>
+    
     <div id="status">
         <img id="status-splash" class="show-image--true fullsize--false use-filter--true" src="./thats-not-my-neighbor.png" alt="">
         <progress id="status-progress"></progress>
@@ -35,34 +36,45 @@
             "focusCanvas": true,
             "gdnativeLibs": []
         };
+
         const engine = new Engine(GODOT_CONFIG);
 
         (function () {
             const statusProgress = document.getElementById('status-progress');
             const statusNotice = document.getElementById('status-notice');
-            const statusMode = 'progress';
+            const statusContainer = document.getElementById('status');
+            const loadingText = document.getElementById('loading-text');
+            
+            // Changed from const to let so it can be reassigned
+            let currentStatusMode = ''; 
 
             function setStatusMode(mode) {
-                if (statusMode === mode || !statusProgress) {
+                if (currentStatusMode === mode || !statusProgress) {
                     return;
                 }
+                
+                // Ensure elements are visible/hidden correctly
                 [statusProgress, statusNotice].forEach((elem) => {
                     elem.style.display = 'none';
                 });
+
                 switch (mode) {
                     case 'progress':
                         statusProgress.style.display = 'block';
+                        statusContainer.style.visibility = 'visible';
                         break;
                     case 'notice':
                         statusNotice.style.display = 'block';
+                        statusContainer.style.visibility = 'visible';
                         break;
                     case 'hidden':
-                        document.getElementById('status').style.display = 'none';
+                        statusContainer.style.display = 'none';
+                        if (loadingText) loadingText.style.display = 'none';
                         break;
                     default:
                         throw new Error('Invalid status mode');
                 }
-                statusMode = mode;
+                currentStatusMode = mode;
             }
 
             function displayFailureNotice(err) {
@@ -94,7 +106,6 @@
                     },
                 }).then(() => {
                     setStatusMode('hidden');
-                    document.getElementById('loading-text').style.display = 'none';
                 }, displayFailureNotice);
             }
         }());
