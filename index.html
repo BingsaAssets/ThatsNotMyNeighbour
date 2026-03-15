@@ -11,7 +11,7 @@
         * { box-sizing: border-box; }
         body { background-color: #161616; color: white; margin: 0; overflow: hidden; font-family: sans-serif; }
         #status {
-            position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+            position: absolute; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; background-color: #161616; z-index: 10;
         }
@@ -41,7 +41,6 @@
         };
     </script>
 
-    <!-- Use relative path — same origin, no CORS issue -->
     <script src="thats-not-my-neighbor.js"></script>
 
     <script>
@@ -49,9 +48,7 @@
             const statusDiv      = document.getElementById('status');
             const statusProgress = document.getElementById('status-progress');
             const loadingText    = document.getElementById('loading-text');
-
-            // Use relative paths — we ARE on the same domain
-            const BASE_PATH = './';
+            const BASE_PATH      = './';
 
             function showError(msg) {
                 const el = document.getElementById('status-notice');
@@ -75,22 +72,26 @@
             async function initGame() {
                 try {
                     if (typeof Engine === 'undefined') {
-                        throw new Error('Engine not defined — thats-not-my-neighbor.js may have failed silently');
+                        throw new Error('Engine not defined — thats-not-my-neighbor.js failed to load');
                     }
 
                     const pckBlob  = await mergeParts('thats-not-my-neighbor.pck',  20,  0,  60);
                     const wasmBlob = await mergeParts('thats-not-my-neighbor.wasm',  3,  60, 90);
                     const pckUrl   = URL.createObjectURL(pckBlob);
+                    // Store wasm as ArrayBuffer so we can create fresh Responses on demand
+                    const wasmBuffer = await wasmBlob.arrayBuffer();
 
                     loadingText.innerText = 'Launching...';
                     statusProgress.value = 90;
 
-                    const wasmResponse = new Response(wasmBlob, {
-                        headers: { 'Content-Type': 'application/wasm' }
-                    });
-
-                    Engine.load = function() {
-                        return Promise.resolve(wasmResponse);
+                    // Override Engine.load BEFORE creating the engine instance.
+                    // The engine clones the response internally, so we must return
+                    // a fresh Response each time from the same ArrayBuffer.
+                    Engine.load = function(basePath, size) {
+                        const response = new Response(wasmBuffer.slice(0), {
+                            headers: { 'Content-Type': 'application/wasm' }
+                        });
+                        return Promise.resolve(response);
                     };
 
                     const engine = new Engine({
