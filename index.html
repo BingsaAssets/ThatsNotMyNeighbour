@@ -5,6 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
     <title>That's not my neighbor</title>
+    <script src="coi-serviceworker.js"></script>
     <link rel="stylesheet" href="./style.css">
     <link id="-gd-engine-icon" rel="icon" type="image/png" href="./thats-not-my-neighbor.icon.png" />
     <link rel="apple-touch-icon" href="./thats-not-my-neighbor.apple-touch-icon.png" />
@@ -23,7 +24,7 @@
     </div>
 
     <script src="./thats-not-my-neighbor.js"></script>
-   <script>
+    <script>
         const GODOT_CONFIG = {
             "args": [],
             "canvasResizePolicy": 2,
@@ -80,21 +81,12 @@
                 setStatusMode('notice');
             }
 
+            // 2. The COI script handles the reload and isolation headers automatically.
+            // We can now proceed directly to checking features and starting the engine.
             const missing = Engine.getMissingFeatures();
             if (missing.length !== 0) {
-                if (window.isSecureContext && ('serviceWorker' in navigator) && (missing.includes('SharedArrayBuffer') || missing.includes('Cross-Origin Isolation'))) {
-                    // Try to install service worker to fix isolation issues
-                    setStatusMode('progress');
-                    engine.installServiceWorker().then(() => {
-                        // Success: Reload the page to activate the worker
-                        window.location.reload();
-                    }).catch((err) => {
-                        displayFailureNotice('Service Worker registration failed: ' + err);
-                    });
-                } else {
-                    const msg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
-                    displayFailureNotice(msg + missing.join('\n'));
-                }
+                const msg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+                displayFailureNotice(msg + missing.join('\n'));
             } else {
                 setStatusMode('progress');
                 engine.startGame({
