@@ -23,7 +23,7 @@
     </div>
 
     <script src="./thats-not-my-neighbor.js"></script>
-    <script>
+   <script>
         const GODOT_CONFIG = {
             "args": [],
             "canvasResizePolicy": 2,
@@ -45,15 +45,11 @@
             const statusContainer = document.getElementById('status');
             const loadingText = document.getElementById('loading-text');
             
-            // Changed from const to let so it can be reassigned
             let currentStatusMode = ''; 
 
             function setStatusMode(mode) {
-                if (currentStatusMode === mode || !statusProgress) {
-                    return;
-                }
+                if (currentStatusMode === mode || !statusProgress) return;
                 
-                // Ensure elements are visible/hidden correctly
                 [statusProgress, statusNotice].forEach((elem) => {
                     elem.style.display = 'none';
                 });
@@ -86,12 +82,19 @@
 
             const missing = Engine.getMissingFeatures();
             if (missing.length !== 0) {
-                const serviceWorker = ('serviceWorker' in navigator);
-                let msg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
-                if (!serviceWorker) {
-                    msg += 'Service Worker Support\n';
+                if (window.isSecureContext && ('serviceWorker' in navigator) && (missing.includes('SharedArrayBuffer') || missing.includes('Cross-Origin Isolation'))) {
+                    // Try to install service worker to fix isolation issues
+                    setStatusMode('progress');
+                    engine.installServiceWorker().then(() => {
+                        // Success: Reload the page to activate the worker
+                        window.location.reload();
+                    }).catch((err) => {
+                        displayFailureNotice('Service Worker registration failed: ' + err);
+                    });
+                } else {
+                    const msg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+                    displayFailureNotice(msg + missing.join('\n'));
                 }
-                displayFailureNotice(msg + missing.join('\n'));
             } else {
                 setStatusMode('progress');
                 engine.startGame({
