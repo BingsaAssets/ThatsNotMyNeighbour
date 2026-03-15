@@ -8,92 +8,116 @@
     <link rel="stylesheet" href="style.css">
     <link rel="icon" type="image/png" href="thats-not-my-neighbor.icon.png" />
     <style>
-        body { background-color: #161616; color: white; margin: 0; overflow: hidden; }
+        * { box-sizing: border-box; }
+        body { background-color: #161616; color: white; margin: 0; overflow: hidden; font-family: sans-serif; }
         #status {
             position: absolute; left: 0; top: 0; right: 0; bottom: 0;
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; background-color: #161616; z-index: 10;
         }
-        #status-splash { 
-            max-width: 80%; 
-            max-height: 40vh; 
-            margin-bottom: 30px; 
-            object-fit: contain;
-        }
-        progress { width: 300px; height: 20px; }
-        #status-notice { color: #ff5555; font-family: sans-serif; margin-top: 10px; visibility: hidden; }
+        #status-splash { max-width: 80%; max-height: 40vh; margin-bottom: 30px; object-fit: contain; }
+        progress { width: 300px; height: 20px; margin-bottom: 10px; }
+        #status-notice { color: #ff5555; margin-top: 10px; max-width: 500px; text-align: center; word-break: break-word; display: none; }
         #loading-text { font-family: cursive; font-size: 24px; margin-bottom: 10px; }
+        #canvas { display: block; width: 100vw; height: 100vh; }
     </style>
 </head>
 <body>
     <div id="status">
-        <img id="status-splash" src="thats-not-my-neighbor.png" alt="That's Not My Neighbor Logo">
+        <img id="status-splash" src="thats-not-my-neighbor.png" alt="Logo" onerror="this.style.display='none'">
         <div id="loading-text">Preparing Game Files...</div>
         <progress id="status-progress" value="0" max="100"></progress>
         <div id="status-notice"></div>
     </div>
-
     <canvas id="canvas">Your browser does not support canvas.</canvas>
 
-    <script src="thats-not-my-neighbor.js"></script>
     <script>
-        const statusProgress = document.getElementById('status-progress');
-        const loadingText = document.getElementById('loading-text');
-        const statusNotice = document.getElementById('status-notice');
-        
-        // Changed back to local files
-        const BASE_PATH = "./";
+        window.onerror = function(msg, src, line) {
+            const el = document.getElementById('status-notice');
+            const lt = document.getElementById('loading-text');
+            if (el) { el.innerText = 'JS Error: ' + msg + ' (line ' + line + ')'; el.style.display = 'block'; }
+            if (lt) lt.innerText = 'Load Failed :(';
+            console.error(msg);
+        };
+    </script>
 
-        async function mergeParts(baseName, count) {
-            let buffers = [];
-            for (let i = 1; i <= count; i++) {
-                loadingText.innerText = `Merging ${baseName} (${i}/${count})...`;
-                const response = await fetch(`${BASE_PATH}${baseName}.part${i}`);
-                if (!response.ok) throw new Error(`Missing ${baseName}.part${i}`);
-                const data = await response.arrayBuffer();
-                buffers.push(data);
-                statusProgress.value = (i / count) * 100;
+    <!-- Use relative path — same origin, no CORS issue -->
+    <script src="thats-not-my-neighbor.js"></script>
+
+    <script>
+        (function() {
+            const statusDiv      = document.getElementById('status');
+            const statusProgress = document.getElementById('status-progress');
+            const loadingText    = document.getElementById('loading-text');
+
+            // Use relative paths — we ARE on the same domain
+            const BASE_PATH = './';
+
+            function showError(msg) {
+                const el = document.getElementById('status-notice');
+                if (el) { el.innerText = msg; el.style.display = 'block'; }
+                loadingText.innerText = 'Load Failed :(';
+                console.error(msg);
             }
-            return new Blob(buffers, { type: 'application/octet-stream' });
-        }
 
-        async function initGame() {
-            try {
-                // 1. Fetch local parts and merge
-                const pckBlob = await mergeParts('thats-not-my-neighbor.pck', 20);
-                const wasmBlob = await mergeParts('thats-not-my-neighbor.wasm', 3);
-                
-                const pckUrl = URL.createObjectURL(pckBlob);
-                const wasmUrl = URL.createObjectURL(wasmBlob);
-
-                // 2. Initialize Engine
-                const engine = new Godot();
-
-                loadingText.innerText = "Launching...";
-
-                // 3. Start game with Blob URLs to prevent default 404 searches
-                engine.startGame({
-                    'executable': wasmUrl,
-                    'mainPack': pckUrl,
-                    'canvasResizePolicy': 2,
-                    'onProgress': function (current, total) {
-                        if (total > 0) {
-                            statusProgress.value = (current / total) * 100;
-                        }
-                    },
-                }).then(() => {
-                    document.getElementById('status').style.display = 'none';
-                });
-
-            } catch (err) {
-                statusNotice.innerText = "Error: " + err.message;
-                statusNotice.style.visibility = 'visible';
-                loadingText.innerText = "Load Failed";
-                console.error(err);
+            async function mergeParts(baseName, count, progStart, progEnd) {
+                const buffers = [];
+                for (let i = 1; i <= count; i++) {
+                    loadingText.innerText = `Loading ${baseName} (${i}/${count})...`;
+                    const res = await fetch(`${BASE_PATH}${baseName}.part${i}`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status} on ${baseName}.part${i}`);
+                    buffers.push(await res.arrayBuffer());
+                    statusProgress.value = progStart + ((i / count) * (progEnd - progStart));
+                }
+                return new Blob(buffers, { type: 'application/octet-stream' });
             }
-        }
 
-        initGame();
+            async function initGame() {
+                try {
+                    if (typeof Engine === 'undefined') {
+                        throw new Error('Engine not defined — thats-not-my-neighbor.js may have failed silently');
+                    }
+
+                    const pckBlob  = await mergeParts('thats-not-my-neighbor.pck',  20,  0,  60);
+                    const wasmBlob = await mergeParts('thats-not-my-neighbor.wasm',  3,  60, 90);
+                    const pckUrl   = URL.createObjectURL(pckBlob);
+
+                    loadingText.innerText = 'Launching...';
+                    statusProgress.value = 90;
+
+                    const wasmResponse = new Response(wasmBlob, {
+                        headers: { 'Content-Type': 'application/wasm' }
+                    });
+
+                    Engine.load = function() {
+                        return Promise.resolve(wasmResponse);
+                    };
+
+                    const engine = new Engine({
+                        canvas:             document.getElementById('canvas'),
+                        executable:         'thats-not-my-neighbor',
+                        mainPack:           pckUrl,
+                        canvasResizePolicy: 2,
+                        focusCanvas:        true,
+                        unloadAfterInit:    false,
+                        onProgress: function(current, total) {
+                            if (total > 0) statusProgress.value = 90 + (current / total) * 10;
+                        },
+                    });
+
+                    await engine.startGame();
+
+                    statusProgress.value = 100;
+                    statusDiv.style.display = 'none';
+
+                } catch (err) {
+                    showError('Error: ' + err.message);
+                    console.error(err);
+                }
+            }
+
+            initGame();
+        })();
     </script>
 </body>
 </html>
