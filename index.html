@@ -14,15 +14,21 @@
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; background-color: #161616; z-index: 10;
         }
-        #status-splash { max-width: 80%; max-height: 50%; margin-bottom: 20px; }
+        #status-splash { 
+            max-width: 80%; 
+            max-height: 40vh; 
+            margin-bottom: 30px; 
+            object-fit: contain;
+        }
         progress { width: 300px; height: 20px; }
         #status-notice { color: #ff5555; font-family: sans-serif; margin-top: 10px; visibility: hidden; }
+        #loading-text { font-family: cursive; font-size: 24px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
     <div id="status">
-        <img id="status-splash" src="thats-not-my-neighbor.png" alt="Logo">
-        <div id="loading-text" style="font-family: cursive; font-size: 24px; margin-bottom: 10px;">Loading Game Parts...</div>
+        <img id="status-splash" src="thats-not-my-neighbor.png" alt="That's Not My Neighbor Logo">
+        <div id="loading-text">Preparing Game Files...</div>
         <progress id="status-progress" value="0" max="100"></progress>
         <div id="status-notice"></div>
     </div>
@@ -34,12 +40,15 @@
         const statusProgress = document.getElementById('status-progress');
         const loadingText = document.getElementById('loading-text');
         const statusNotice = document.getElementById('status-notice');
+        
+        // Changed back to local files
+        const BASE_PATH = "./";
 
         async function mergeParts(baseName, count) {
             let buffers = [];
             for (let i = 1; i <= count; i++) {
-                loadingText.innerText = `Fetching ${baseName} (${i}/${count})...`;
-                const response = await fetch(`${baseName}.part${i}`);
+                loadingText.innerText = `Merging ${baseName} (${i}/${count})...`;
+                const response = await fetch(`${BASE_PATH}${baseName}.part${i}`);
                 if (!response.ok) throw new Error(`Missing ${baseName}.part${i}`);
                 const data = await response.arrayBuffer();
                 buffers.push(data);
@@ -50,20 +59,19 @@
 
         async function initGame() {
             try {
-                // 1. Merge the split files
+                // 1. Fetch local parts and merge
                 const pckBlob = await mergeParts('thats-not-my-neighbor.pck', 20);
                 const wasmBlob = await mergeParts('thats-not-my-neighbor.wasm', 3);
                 
                 const pckUrl = URL.createObjectURL(pckBlob);
                 const wasmUrl = URL.createObjectURL(wasmBlob);
 
-                // 2. Initialize the Godot engine instance
-                // In your JS, Godot is a function that returns the Engine class
+                // 2. Initialize Engine
                 const engine = new Godot();
 
-                loadingText.innerText = "Starting Engine...";
+                loadingText.innerText = "Launching...";
 
-                // 3. Start the game using the merged blobs
+                // 3. Start game with Blob URLs to prevent default 404 searches
                 engine.startGame({
                     'executable': wasmUrl,
                     'mainPack': pckUrl,
