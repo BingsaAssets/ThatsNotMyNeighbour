@@ -1,74 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <base href="https://cdn.jsdelivr.net/gh/genizy/web-port@de75523557e46f375fc9173a9a0c0d34d8ed34f9/thats-not-my-neighbor/">
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-    <title>That's not my neighbor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>That's Not My Neighbor</title>
+    <script src="coi-serviceworker.js"></script>
     <link rel="stylesheet" href="style.css">
-    <link id="-gd-engine-icon" rel="icon" type="image/png" href="thats-not-my-neighbor.icon.png" />
-    <link rel="apple-touch-icon" href="thats-not-my-neighbor.apple-touch-icon.png" />
+    <link rel="icon" type="image/png" href="thats-not-my-neighbor.icon.png" />
+    <style>
+        body { background-color: #161616; color: white; margin: 0; overflow: hidden; }
+        #loading-container {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 100vh; font-family: sans-serif;
+        }
+        progress { width: 300px; }
+    </style>
 </head>
-
 <body>
-    <script src="main.js"></script>
-    <div id="loading-text" style="color: white; font-family: cursive; font-size: 48px; text-align: center; margin-top: 20px;">LOADING...</div>
-    <canvas id="canvas"> Your browser does not support the canvas tag. </canvas>
-    <noscript> Your browser does not support JavaScript. </noscript>
-    <div id="status">
-        <img id="status-splash" class="show-image--true fullsize--false use-filter--true" src="thats-not-my-neighbor.png" alt="">
-        <progress id="status-progress"></progress>
-        <div id="status-notice"></div>
+    <div id="loading-container">
+        <div id="loading-text" style="font-size: 24px; margin-bottom: 10px;">Merging Game Files...</div>
+        <progress id="merge-progress" value="0" max="100"></progress>
     </div>
+
+    <canvas id="canvas">Your browser does not support canvas.</canvas>
 
     <script src="thats-not-my-neighbor.js"></script>
     <script>
-        const engine = new Godot();
-        const statusProgress = document.getElementById('status-progress');
-        const statusNotice = document.getElementById('status-notice');
+        const statusProgress = document.getElementById('merge-progress');
+        const loadingText = document.getElementById('loading-text');
 
-        function setStatusMode(mode) {
-            if (mode === 'hidden') {
-                document.getElementById('status').style.visibility = 'hidden';
-            } else {
-                document.getElementById('status').style.visibility = 'visible';
+        async function mergeParts(baseName, count) {
+            let buffers = [];
+            for (let i = 1; i <= count; i++) {
+                loadingText.innerText = `Fetching ${baseName} part ${i}/${count}...`;
+                const response = await fetch(`${baseName}.part${i}`);
+                if (!response.ok) throw new Error(`Failed to fetch ${baseName}.part${i}`);
+                const data = await response.arrayBuffer();
+                buffers.push(data);
+                
+                // Update simple progress bar
+                statusProgress.value = (i / count) * 100;
+            }
+            return new Blob(buffers, { type: 'application/octet-stream' });
+        }
+
+        async function startGame() {
+            try {
+                // 1. Merge PCK parts (1-20)
+                const pckBlob = await mergeParts('thats-not-my-neighbor.pck', 20);
+                const pckUrl = URL.createObjectURL(pckBlob);
+
+                // 2. Merge WASM parts (1-3)
+                const wasmBlob = await mergeParts('thats-not-my-neighbor.wasm', 3);
+                const wasmUrl = URL.createObjectURL(wasmBlob);
+
+                // 3. Initialize Godot Engine
+                const engine = new Godot();
+                
+                loadingText.innerText = "Starting Engine...";
+                
+                engine.startGame({
+                    'args': ['--main-pack', pckUrl],
+                    'canvasResizePolicy': 2,
+                    'executable': wasmUrl, // Pointing to our merged WASM
+                    'onProgress': function (current, total) {
+                        if (total > 0) {
+                            statusProgress.value = (current / total) * 100;
+                        }
+                    },
+                }).then(() => {
+                    document.getElementById('loading-container').style.display = 'none';
+                });
+
+            } catch (err) {
+                loadingText.innerText = "Error: " + err.message;
+                console.error(err);
             }
         }
 
-        function displayFailureNotice(err) {
-            const msg = err.message || err;
-            console.error(msg);
-            statusNotice.innerText = msg;
-            statusNotice.style.display = 'block';
-            setStatusMode('notice');
-        }
-
-        const missing = engine.getMissingFeatures();
-        if (missing.length !== 0) {
-            if (window.location.protocol !== 'https:' && engine.isSecureContext()) {
-                displayFailureNotice('HTTP is not supported for this project. Please use HTTPS.');
-            } else {
-                displayFailureNotice('The following features required to run Godot projects on the Web are missing:\n' + missing.join('\n'));
-            }
-        } else {
-            setStatusMode('progress');
-            engine.startGame({
-                'onProgress': function (current, total) {
-                    if (current > 0 && total > 0) {
-                        statusProgress.value = current;
-                        statusProgress.max = total;
-                    } else {
-                        statusProgress.removeAttribute('value');
-                        statusProgress.removeAttribute('max');
-                    }
-                },
-            }).then(() => {
-                setStatusMode('hidden');
-                document.getElementById('loading-text').style.display = 'none';
-            }, displayFailureNotice);
-        }
+        // Start the process
+        startGame();
     </script>
 </body>
-
 </html>
